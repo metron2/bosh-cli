@@ -48,7 +48,7 @@ func (c TakeOutCmd) Run(opts TakeOutOpts) error {
 		}
 	}
 	for _, s := range deployment.Stemcells {
-		err := c.to.RetrieveStemcell(s, c.ui, opts.StemcellType)
+		err := c.to.TakeOutStemcell(s, c.ui, opts.StemcellType)
 		if err != nil {
 
 		}

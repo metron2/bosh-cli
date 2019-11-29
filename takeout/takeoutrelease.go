@@ -22,6 +22,8 @@ func (c RealUtensils) RetrieveRelease(r boshdir.ManifestRelease, ui boshui.UI, l
 	ui.PrintLinef("Downloading release: %s / %s -> %s", r.Name, r.Version, localFileName)
 
 	tempFileName := localFileName + ".download"
+
+
 	resp, err := http.Get(r.URL)
 
 	if resp != nil {
@@ -67,15 +69,26 @@ func (c RealUtensils) RetrieveRelease(r boshdir.ManifestRelease, ui boshui.UI, l
 	return nil
 }
 
-func (c RealUtensils) RetrieveStemcell(s boshdir.ManifestReleaseStemcell, ui boshui.UI, stemCellType string) (err error) {
+func (c RealUtensils) TakeOutStemcell(s boshdir.ManifestReleaseStemcell, ui boshui.UI, stemCellType string) (err error) {
 
 	localFileName := fmt.Sprintf("bosh-%s-%s-go_agent-stemcell_v%s.tgz", stemCellType, s.OS, s.Version)
+
+	if _, err := os.Stat(localFileName); os.IsNotExist(err) {
+
+		err := c.RetrieveStemcell(ui, s, localFileName, stemCellType)
+		if err != nil {
+			return err
+		}
+	} else {
+		ui.PrintLinef("Stemcell present: %s", localFileName)
+	}
+	return
+}
+
+func (c RealUtensils) RetrieveStemcell(ui boshui.UI, s boshdir.ManifestReleaseStemcell, localFileName string, stemCellType string) (err error) {
 	ui.PrintLinef("Downloading stemcell: %s / %s -> %s", s.OS, s.Version, localFileName)
-
 	url := fmt.Sprintf("https://bosh.io/d/stemcells/bosh-%s-%s-go_agent?v=%s", stemCellType, s.OS, s.Version)
-
 	ui.PrintLinef("Trying %s", url)
-
 	resp, err := http.Get(url)
 	if resp != nil {
 		defer func() {
@@ -85,29 +98,27 @@ func (c RealUtensils) RetrieveStemcell(s boshdir.ManifestReleaseStemcell, ui bos
 		}()
 	}
 	if err != nil {
-		return
+		return err
 	}
-
 	// Create the file
 	out, err := os.Create(localFileName)
 	if err != nil {
-		return
+		return err
 	}
 	defer func() {
 		if ferr := out.Close(); ferr != nil {
 			err = ferr
 		}
 	}()
-
 	// Write the body to file
 	hash := sha1.New()
 	_, err = io.Copy(out, io.TeeReader(resp.Body, hash))
 	actualSha1 := fmt.Sprintf("%x", hash.Sum(nil))
 	if err != nil {
-		return
+		return err
 	}
 	ui.PrintLinef("Stemcell %s SHA1:%s", localFileName, actualSha1)
-	return
+	return err
 }
 
 func (c RealUtensils) TakeOutRelease(r boshdir.ManifestRelease, ui boshui.UI, mirrorPrefix string) (entry OpEntry, err error) {
