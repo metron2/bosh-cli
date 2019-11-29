@@ -40,7 +40,7 @@ func (c TakeOutCmd) Run(opts TakeOutOpts) error {
 			c.ui.PrintLinef("Release does not have a URL for take_out; Name: %s / %s", r.Name, r.Version)
 			return bosherr.WrapErrorf(nil, "Provide an opsfile that has a URL or removes this release") // TODO
 		} else {
-			o, err := c.to.TakeOutRelease(r, c.ui, opts.MirrorPrefix)
+			o, err := c.to.TakeOutRelease(r, c.ui)
 			if err != nil {
 				return err
 			}

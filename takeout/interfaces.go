@@ -12,8 +12,7 @@ type Utensils interface {
 	StemcellDownloader
 }
 type Manifest struct {
-	Name string
-
+	Name      string
 	Releases  []boshdir.ManifestRelease
 	Stemcells []boshdir.ManifestReleaseStemcell
 }
@@ -32,5 +31,5 @@ type StemcellDownloader interface {
 }
 
 type OpFileGenerator interface {
-	TakeOutRelease(r boshdir.ManifestRelease, ui boshui.UI, mirrorPrefix string) (entry OpEntry, err error)
+	TakeOutRelease(r boshdir.ManifestRelease, ui boshui.UI) (entry OpEntry, err error)
 }

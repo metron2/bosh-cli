@@ -23,7 +23,6 @@ func (c RealUtensils) RetrieveRelease(r boshdir.ManifestRelease, ui boshui.UI, l
 
 	tempFileName := localFileName + ".download"
 
-
 	resp, err := http.Get(r.URL)
 
 	if resp != nil {
@@ -74,8 +73,12 @@ func (c RealUtensils) TakeOutStemcell(s boshdir.ManifestReleaseStemcell, ui bosh
 	localFileName := fmt.Sprintf("bosh-%s-%s-go_agent-stemcell_v%s.tgz", stemCellType, s.OS, s.Version)
 
 	if _, err := os.Stat(localFileName); os.IsNotExist(err) {
-
-		err := c.RetrieveStemcell(ui, s, localFileName, stemCellType)
+		tempFileName := localFileName + ".download"
+		err := c.RetrieveStemcell(ui, s, tempFileName, stemCellType)
+		if err != nil {
+			return err
+		}
+		err = os.Rename(tempFileName, localFileName)
 		if err != nil {
 			return err
 		}
@@ -121,7 +124,7 @@ func (c RealUtensils) RetrieveStemcell(ui boshui.UI, s boshdir.ManifestReleaseSt
 	return err
 }
 
-func (c RealUtensils) TakeOutRelease(r boshdir.ManifestRelease, ui boshui.UI, mirrorPrefix string) (entry OpEntry, err error) {
+func (c RealUtensils) TakeOutRelease(r boshdir.ManifestRelease, ui boshui.UI) (entry OpEntry, err error) {
 
 	// generate a local file name that's safe
 	localFileName := BadChar.ReplaceAllString(fmt.Sprintf("%s_v%s.tgz", r.Name, r.Version), "_")
@@ -136,8 +139,7 @@ func (c RealUtensils) TakeOutRelease(r boshdir.ManifestRelease, ui boshui.UI, mi
 	}
 	if len(r.Name) > 0 {
 		path := fmt.Sprintf("/releases/name=%s/url", r.Name)
-		localFile := fmt.Sprintf("%s%s", mirrorPrefix, localFileName)
-		entry = OpEntry{Type: "replace", Path: path, Value: localFile}
+		entry = OpEntry{Type: "remove", Path: path}
 	}
 	return entry, err
 }
