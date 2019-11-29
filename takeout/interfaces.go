@@ -27,7 +27,8 @@ type ReleaseDownloader interface {
 }
 
 type StemcellDownloader interface {
-	RetrieveStemcell(s boshdir.ManifestReleaseStemcell, ui boshui.UI, stemCellType string) (err error)
+	TakeOutStemcell(s boshdir.ManifestReleaseStemcell, ui boshui.UI, stemCellType string) (err error)
+	RetrieveStemcell(ui boshui.UI, s boshdir.ManifestReleaseStemcell, localFileName string, stemCellType string) (err error)
 }
 
 type OpFileGenerator interface {
