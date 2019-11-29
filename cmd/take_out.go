@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	. "github.com/cloudfoundry/bosh-cli/cmd/opts"
 	boshtpl "github.com/cloudfoundry/bosh-cli/director/template"
 	"github.com/cloudfoundry/bosh-cli/takeout"
 	boshui "github.com/cloudfoundry/bosh-cli/ui"

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	. "github.com/cloudfoundry/bosh-cli/cmd"
+	. "github.com/cloudfoundry/bosh-cli/cmd/opts"
 	boshdir "github.com/cloudfoundry/bosh-cli/director"
 	fakedir "github.com/cloudfoundry/bosh-cli/director/directorfakes"
 	fakeui "github.com/cloudfoundry/bosh-cli/ui/fakes"
@@ -58,8 +59,9 @@ var _ = Describe("VMsCmd", func() {
 					ResourcePool: "in1-rp",
 					Active:       &t,
 
-					IPs: []string{"in1-ip1", "in1-ip2"},
-					DNS: []string{"in1-dns1", "in1-dns2"},
+					IPs:        []string{"in1-ip1", "in1-ip2"},
+					Deployment: "dep",
+					DNS:        []string{"in1-dns1", "in1-dns2"},
 
 					VMID:               "in1-cid",
 					AgentID:            "in1-agent-id",
@@ -91,8 +93,9 @@ var _ = Describe("VMsCmd", func() {
 					ResourcePool: "in2-rp",
 					Active:       &f,
 
-					IPs: []string{"in2-ip1"},
-					DNS: []string{"in2-dns1"},
+					IPs:        []string{"in2-ip1"},
+					Deployment: "dep",
+					DNS:        []string{"in2-dns1"},
 
 					VMID:               "in2-cid",
 					AgentID:            "in2-agent-id",
@@ -121,6 +124,7 @@ var _ = Describe("VMsCmd", func() {
 					Index:        nil,
 					ProcessState: "unresponsive agent",
 					ResourcePool: "",
+					Deployment:   "dep",
 				},
 			}
 		})

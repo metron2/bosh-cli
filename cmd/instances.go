@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"code.cloudfoundry.org/workpool"
+	. "github.com/cloudfoundry/bosh-cli/cmd/opts"
 	boshdir "github.com/cloudfoundry/bosh-cli/director"
 	boshui "github.com/cloudfoundry/bosh-cli/ui"
 	boshtbl "github.com/cloudfoundry/bosh-cli/ui/table"
@@ -22,10 +23,11 @@ func NewInstancesCmd(ui boshui.UI, director boshdir.Director, parallel int) Inst
 
 func (c InstancesCmd) Run(opts InstancesOpts) error {
 	instTable := InstanceTable{
-		Processes: opts.Processes,
-		Details:   opts.Details,
-		DNS:       opts.DNS,
-		Vitals:    opts.Vitals,
+		DeploymentDetails: true,
+		Processes:         opts.Processes,
+		Details:           opts.Details,
+		DNS:               opts.DNS,
+		Vitals:            opts.Vitals,
 	}
 
 	if len(opts.Deployment) > 0 {

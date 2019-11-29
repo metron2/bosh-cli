@@ -21,9 +21,9 @@ import (
 	mock_agentclient "github.com/cloudfoundry/bosh-cli/agentclient/mocks"
 	mock_blobstore "github.com/cloudfoundry/bosh-cli/blobstore/mocks"
 	bicloud "github.com/cloudfoundry/bosh-cli/cloud"
-	fakebicloud "github.com/cloudfoundry/bosh-cli/cloud/fakes"
 	mock_cloud "github.com/cloudfoundry/bosh-cli/cloud/mocks"
 	bicmd "github.com/cloudfoundry/bosh-cli/cmd"
+	. "github.com/cloudfoundry/bosh-cli/cmd/opts"
 	biconfig "github.com/cloudfoundry/bosh-cli/config"
 	mock_config "github.com/cloudfoundry/bosh-cli/config/mocks"
 	bicpirel "github.com/cloudfoundry/bosh-cli/cpi/release"
@@ -60,13 +60,16 @@ import (
 
 var _ = Describe("CreateEnvCmd", func() {
 	var mockCtrl *gomock.Controller
+	var mockCloudCtrl *gomock.Controller
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
+		mockCloudCtrl = gomock.NewController(GinkgoT())
 	})
 
 	AfterEach(func() {
 		mockCtrl.Finish()
+		mockCloudCtrl.Finish()
 	})
 
 	Describe("Run", func() {
@@ -88,6 +91,7 @@ var _ = Describe("CreateEnvCmd", func() {
 			mockAgentClient           *mock_agentclient.MockAgentClient
 			mockAgentClientFactory    *mock_httpagent.MockAgentClientFactory
 			mockCloudFactory          *mock_cloud.MockFactory
+			mockCloud                 *mock_cloud.MockCloud
 
 			cpiRelease *fakebirel.FakeRelease
 			logger     boshlog.Logger
@@ -119,6 +123,8 @@ var _ = Describe("CreateEnvCmd", func() {
 			deploymentStatePath    string
 			cpiReleaseTarballPath  string
 			stemcellTarballPath    string
+			stemcellApiVersion     = 2
+			cpiApiVersion          = 2
 			extractedStemcell      bistemcell.ExtractedStemcell
 
 			expectDeploy *gomock.Call
@@ -129,11 +135,10 @@ var _ = Describe("CreateEnvCmd", func() {
 			template               bidepltpl.DeploymentTemplate
 			boshDeploymentManifest bideplmanifest.Manifest
 			installationManifest   biinstallmanifest.Manifest
-			cloud                  bicloud.Cloud
 
 			cloudStemcell bistemcell.CloudStemcell
 
-			defaultCreateEnvOpts bicmd.CreateEnvOpts
+			defaultCreateEnvOpts CreateEnvOpts
 
 			expectedSkipDrain bool
 
@@ -142,9 +147,13 @@ var _ = Describe("CreateEnvCmd", func() {
 			expectStemcellDeleteUnused *gomock.Call
 			expectInstall              *gomock.Call
 			expectNewCloud             *gomock.Call
+
+			expectedRegistryConfig biinstallmanifest.Registry
+			expectedDeployError    error
 		)
 
 		BeforeEach(func() {
+			expectedDeployError = nil
 			expectedSkipDrain = false
 			logger = boshlog.NewLogger(boshlog.LevelNone)
 			stdOut = gbytes.NewBuffer()
@@ -212,17 +221,6 @@ var _ = Describe("CreateEnvCmd", func() {
 			cpiReleaseTarballPath = filepath.Join("/", "release", "tarball", "path")
 
 			stemcellTarballPath = filepath.Join("/", "stemcell", "tarball", "path")
-			extractedStemcell = bistemcell.NewExtractedStemcell(
-				bistemcell.Manifest{
-					Name:            "fake-stemcell-name",
-					Version:         "fake-stemcell-version",
-					SHA1:            "fake-stemcell-sha1",
-					CloudProperties: biproperty.Map{},
-				},
-				"fake-extracted-path",
-				nil,
-				fs,
-			)
 
 			// create input files
 			fs.WriteFileString(cpiReleaseTarballPath, "")
@@ -259,6 +257,8 @@ var _ = Describe("CreateEnvCmd", func() {
 				},
 				Mbus: mbusURL,
 			}
+
+			expectedRegistryConfig = installationManifest.Registry
 
 			// parsed BOSH deployment manifest
 			boshDeploymentManifest = bideplmanifest.Manifest{
@@ -301,13 +301,9 @@ var _ = Describe("CreateEnvCmd", func() {
 				return cpiRelease, nil
 			}
 
-			cloud = bicloud.NewCloud(fakebicloud.NewFakeCPICmdRunner(), "fake-director-id", logger)
-			cloudStemcell = fakebistemcell.NewFakeCloudStemcell(
-				"fake-stemcell-cid", "fake-stemcell-name", "fake-stemcell-version")
-
-			defaultCreateEnvOpts = bicmd.CreateEnvOpts{
-				Args: bicmd.CreateEnvArgs{
-					Manifest: bicmd.FileBytesWithPathArg{Path: deploymentManifestPath},
+			defaultCreateEnvOpts = CreateEnvOpts{
+				Args: CreateEnvArgs{
+					Manifest: FileBytesWithPathArg{Path: deploymentManifestPath},
 				},
 			}
 		})
@@ -385,9 +381,31 @@ var _ = Describe("CreateEnvCmd", func() {
 
 			expectLegacyMigrate = mockLegacyDeploymentStateMigrator.EXPECT().MigrateIfExists(filepath.Join("/", "path", "to", "bosh-deployments.yml")).AnyTimes()
 
+			extractedStemcell = bistemcell.NewExtractedStemcell(
+				bistemcell.Manifest{
+					Name:            "fake-stemcell-name",
+					Version:         "fake-stemcell-version",
+					SHA1:            "fake-stemcell-sha1",
+					ApiVersion:      stemcellApiVersion,
+					CloudProperties: biproperty.Map{},
+				},
+				"fake-extracted-path",
+				nil,
+				fs,
+			)
+
+			stemcellTarballPath = filepath.Join("/", "stemcell", "tarball", "path")
+
+			cloudStemcell = fakebistemcell.NewFakeCloudStemcell(
+				"fake-stemcell-cid", "fake-stemcell-name", "fake-stemcell-version", stemcellApiVersion)
+
+			mockCloud = mock_cloud.NewMockCloud(mockCloudCtrl)
+			mockCloud.EXPECT().Info().Return(bicloud.CpiInfo{ApiVersion: cpiApiVersion}, nil).AnyTimes()
+			mockCloud.EXPECT().String().AnyTimes()
+
 			fakeStemcellExtractor.SetExtractBehavior(stemcellTarballPath, extractedStemcell, nil)
 
-			fakeStemcellManagerFactory.SetNewManagerBehavior(cloud, mockStemcellManager)
+			fakeStemcellManagerFactory.SetNewManagerBehavior(mockCloud, mockStemcellManager)
 
 			expectStemcellUpload = mockStemcellManager.EXPECT().Upload(extractedStemcell, fakeStage).Return(cloudStemcell, nil).AnyTimes()
 
@@ -418,22 +436,22 @@ var _ = Describe("CreateEnvCmd", func() {
 			}).Return(installation, nil).AnyTimes()
 			mockInstaller.EXPECT().Cleanup(installation).AnyTimes()
 
-			mockDeployment := mock_deployment.NewMockDeployment(mockCtrl)
+			//mockDeployment := mock_deployment.NewMockDeployment(mockCtrl)
 
 			expectDeploy = mockDeployer.EXPECT().Deploy(
-				cloud,
+				mockCloud,
 				boshDeploymentManifest,
 				cloudStemcell,
-				installationManifest.Registry,
+				expectedRegistryConfig,
 				fakeVMManager,
 				mockBlobstore,
 				expectedSkipDrain,
 				gomock.Any(),
 			).Do(func(_, _, _, _, _, _, _ interface{}, stage biui.Stage) {
 				Expect(fakeStage.SubStages).To(ContainElement(stage))
-			}).Return(mockDeployment, nil).AnyTimes()
+			}).Return(nil, expectedDeployError).AnyTimes()
 
-			expectNewCloud = mockCloudFactory.EXPECT().NewCloud(installation, directorID).Return(cloud, nil).AnyTimes()
+			expectNewCloud = mockCloudFactory.EXPECT().NewCloud(installation, directorID, stemcellApiVersion).Return(mockCloud, nil).AnyTimes()
 		})
 
 		Describe("prints the deployment manifest and state file", func() {
@@ -453,10 +471,10 @@ var _ = Describe("CreateEnvCmd", func() {
 
 			Context("when state file is specified", func() {
 				It("prints specified state file path", func() {
-					createEnvOptsWithStatePath := bicmd.CreateEnvOpts{
+					createEnvOptsWithStatePath := CreateEnvOpts{
 						StatePath: filepath.Join("/", "specified", "path", "to", "cool-state.json"),
-						Args: bicmd.CreateEnvArgs{
-							Manifest: bicmd.FileBytesWithPathArg{Path: deploymentManifestPath},
+						Args: CreateEnvArgs{
+							Manifest: FileBytesWithPathArg{Path: deploymentManifestPath},
 						},
 					}
 
@@ -576,15 +594,6 @@ var _ = Describe("CreateEnvCmd", func() {
 			}))
 		})
 
-		It("adds a new 'Starting registry' event logger stage", func() {
-			err := command.Run(fakeStage, defaultCreateEnvOpts)
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(fakeStage.PerformCalls[2]).To(Equal(&fakebiui.PerformCall{
-				Name: "Starting registry",
-			}))
-		})
-
 		Context("when the registry is configured", func() {
 			BeforeEach(func() {
 				installationManifest.Registry = biinstallmanifest.Registry{
@@ -593,14 +602,68 @@ var _ = Describe("CreateEnvCmd", func() {
 					Host:     "fake-host",
 					Port:     123,
 				}
+				expectedRegistryConfig = biinstallmanifest.Registry{}
 			})
 
-			It("starts & stops the registry", func() {
-				mockRegistryServerManager.EXPECT().Start("fake-username", "fake-password", "fake-host", 123).Return(mockRegistryServer, nil)
-				mockRegistryServer.EXPECT().Stop()
+			It("should not start or attempt to stop the registry", func() {
+				mockRegistryServerManager.EXPECT().Start(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+				mockRegistryServer.EXPECT().Stop().Times(0)
 
 				err := command.Run(fakeStage, defaultCreateEnvOpts)
 				Expect(err).NotTo(HaveOccurred())
+			})
+
+			itStartsStopsRegistry := func() {
+				It("starts & stops the registry", func() {
+					mockRegistryServerManager.EXPECT().Start("fake-username", "fake-password", "fake-host", 123).Return(mockRegistryServer, nil)
+					mockRegistryServer.EXPECT().Stop()
+
+					err := command.Run(fakeStage, defaultCreateEnvOpts)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("adds a new 'Starting registry' event logger stage", func() {
+					mockRegistryServerManager.EXPECT().Start("fake-username", "fake-password", "fake-host", 123).Return(mockRegistryServer, nil)
+					mockRegistryServer.EXPECT().Stop()
+
+					err := command.Run(fakeStage, defaultCreateEnvOpts)
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(fakeStage.PerformCalls[2]).To(Equal(&fakebiui.PerformCall{
+						Name: "Starting registry",
+					}))
+				})
+			}
+
+			Context("when stemcell version is 1", func() {
+				BeforeEach(func() {
+					stemcellApiVersion = 1
+
+					expectedRegistryConfig = biinstallmanifest.Registry{
+						Username: "fake-username",
+						Password: "fake-password",
+						Host:     "fake-host",
+						Port:     123,
+					}
+				})
+
+				itStartsStopsRegistry()
+			})
+
+			Context("when stemcell is 2 but cpi version is 1", func() {
+				BeforeEach(func() {
+					stemcellApiVersion = 2
+					cpiApiVersion = 1
+
+					expectedRegistryConfig = biinstallmanifest.Registry{
+						Username: "fake-username",
+						Password: "fake-password",
+						Host:     "fake-host",
+						Port:     123,
+					}
+				})
+
+				itStartsStopsRegistry()
 			})
 		})
 
@@ -1065,8 +1128,10 @@ var _ = Describe("CreateEnvCmd", func() {
 
 		Context("when deploy fails", func() {
 			BeforeEach(func() {
+				expectedDeployError = errors.New("fake-deploy-error")
+
 				mockDeployer.EXPECT().Deploy(
-					cloud,
+					mockCloud,
 					boshDeploymentManifest,
 					cloudStemcell,
 					installationManifest.Registry,
@@ -1074,7 +1139,7 @@ var _ = Describe("CreateEnvCmd", func() {
 					mockBlobstore,
 					expectedSkipDrain,
 					gomock.Any(),
-				).Return(nil, errors.New("fake-deploy-error")).AnyTimes()
+				).Return(nil, expectedDeployError).AnyTimes()
 
 				previousDeploymentState := biconfig.DeploymentState{
 					CurrentReleaseIDs: []string{"my-release-id-1"},
@@ -1100,6 +1165,27 @@ var _ = Describe("CreateEnvCmd", func() {
 				Expect(deploymentState.CurrentManifestSHA).To(Equal(""))
 				Expect(deploymentState.Releases).To(Equal([]biconfig.ReleaseRecord{}))
 				Expect(deploymentState.CurrentReleaseIDs).To(Equal([]string{}))
+			})
+		})
+
+		Context("when there is no stemcell version in the stemcell manifest", func() {
+			BeforeEach(func() {
+				extractedStemcell = bistemcell.NewExtractedStemcell(
+					bistemcell.Manifest{
+						Name:            "fake-stemcell-name",
+						Version:         "fake-stemcell-version",
+						SHA1:            "fake-stemcell-sha1",
+						CloudProperties: biproperty.Map{},
+					},
+					"fake-extracted-path",
+					nil,
+					fs,
+				)
+			})
+
+			It("still deploys", func() {
+				err := command.Run(fakeStage, defaultCreateEnvOpts)
+				Expect(err).ToNot(HaveOccurred())
 			})
 		})
 	})

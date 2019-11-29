@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	. "github.com/cloudfoundry/bosh-cli/cmd"
+	. "github.com/cloudfoundry/bosh-cli/cmd/opts"
 	boshdir "github.com/cloudfoundry/bosh-cli/director"
 	fakedir "github.com/cloudfoundry/bosh-cli/director/directorfakes"
 	fakeui "github.com/cloudfoundry/bosh-cli/ui/fakes"
@@ -79,6 +80,10 @@ var _ = Describe("ConfigsCmd", func() {
 						boshtbl.NewValueString(""),
 					},
 				},
+
+				Notes: []string{
+					"Only showing active configs. To see older versions use the --recent=10 option.",
+				},
 			}))
 		})
 
@@ -129,6 +134,10 @@ var _ = Describe("ConfigsCmd", func() {
 							boshtbl.NewValueString(""),
 						},
 					},
+
+					Notes: []string{
+						"Only showing active configs. To see older versions use the --recent=10 option.",
+					},
 				}))
 			})
 		})
@@ -171,6 +180,10 @@ var _ = Describe("ConfigsCmd", func() {
 							boshtbl.NewValueString(""),
 							boshtbl.NewValueString(""),
 						},
+					},
+
+					Notes: []string{
+						"Only showing active configs. To see older versions use the --recent=10 option.",
 					},
 				}))
 			})
@@ -216,6 +229,10 @@ var _ = Describe("ConfigsCmd", func() {
 							boshtbl.NewValueString(""),
 						},
 					},
+
+					Notes: []string{
+						"Only showing active configs. To see older versions use the --recent=10 option.",
+					},
 				}))
 			})
 		})
@@ -224,8 +241,8 @@ var _ = Describe("ConfigsCmd", func() {
 			BeforeEach(func() {
 				opts = ConfigsOpts{Recent: 2}
 				configs = []boshdir.Config{
-					boshdir.Config{Type: "my-type", Name: "some-name", ID: "123"},
-					boshdir.Config{Type: "my-type", Name: "some-name", ID: "234"},
+					boshdir.Config{Type: "my-type", Name: "some-name", ID: "123", Current: false},
+					boshdir.Config{Type: "my-type", Name: "some-name", ID: "234", Current: true},
 				}
 			})
 
@@ -259,12 +276,16 @@ var _ = Describe("ConfigsCmd", func() {
 							boshtbl.NewValueString(""),
 						},
 						{
-							boshtbl.NewValueString("234"),
+							boshtbl.NewValueString("234*"),
 							boshtbl.NewValueString("my-type"),
 							boshtbl.NewValueString("some-name"),
 							boshtbl.NewValueString(""),
 							boshtbl.NewValueString(""),
 						},
+					},
+
+					Notes: []string{
+						"(*) Currently active",
 					},
 				}))
 			})
