@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/cloudfoundry/bosh-cli/takeout"
 	"path/filepath"
 
 	"github.com/cppforlife/go-patch/patch"
@@ -131,6 +132,9 @@ func (c Cmd) Execute() (cmdErr error) {
 
 	case *DeleteDeploymentOpts:
 		return NewDeleteDeploymentCmd(deps.UI, c.deployment()).Run(*opts)
+
+	case *TakeOutOpts:
+		return NewTakeOutCmd(deps.UI, takeout.RealUtensils{}).Run(*opts)
 
 	case *ReleasesOpts:
 		return NewReleasesCmd(deps.UI, c.director()).Run()
