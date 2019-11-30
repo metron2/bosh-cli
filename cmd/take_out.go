@@ -39,8 +39,8 @@ func (c TakeOutCmd) Run(opts TakeOutOpts) error {
 	var releaseChanges []takeout.OpEntry
 	for _, r := range deployment.Releases {
 		if r.URL == "" {
-			c.ui.PrintLinef("Release does not have a URL for take_out; Name: %s / %s", r.Name, r.Version)
-			return bosherr.WrapErrorf(nil, "Provide an opsfile that has a URL or remove this release") // TODO
+			c.ui.PrintLinef("Release does not have a URL for take-out; Name: %s / %s", r.Name, r.Version)
+			return bosherr.WrapErrorf(nil, "Provide an opsfile that has a URL or remove this release")
 		} else {
 			o, err := c.to.TakeOutRelease(r, c.ui)
 			if err != nil {
@@ -50,9 +50,11 @@ func (c TakeOutCmd) Run(opts TakeOutOpts) error {
 		}
 	}
 	for _, s := range deployment.Stemcells {
-		err := c.to.TakeOutStemcell(s, c.ui, opts.StemcellType)
-		if err != nil {
-
+		if s.Version != "latest" {
+			err := c.to.TakeOutStemcell(s, c.ui, opts.StemcellType)
+			if err != nil {
+				return bosherr.WrapErrorf(err, "Failed to get stemcell")
+			}
 		}
 	}
 
