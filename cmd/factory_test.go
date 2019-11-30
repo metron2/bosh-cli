@@ -116,7 +116,7 @@ var _ = Describe("Factory", func() {
 			Entry("stop", "stop", []string{"slug"}),
 			Entry("sync-blobs", "sync-blobs", []string{}),
 			Entry("take-snapshot", "take-snapshot", []string{"group/id"}),
-			Entry("take-out", "take-out", []string{"take-out-op", "file"}),
+			Entry("take-out", "take-out", []string{filePlaceholder, filePlaceholder}),
 			Entry("task", "task", []string{"1234"}),
 			Entry("tasks", "tasks", []string{}),
 			Entry("update-cloud-config", "update-cloud-config", []string{filePlaceholder}),

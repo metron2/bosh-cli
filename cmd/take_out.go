@@ -26,8 +26,9 @@ func (c TakeOutCmd) Run(opts TakeOutOpts) error {
 	if err != nil {
 		return bosherr.WrapErrorf(err, "Evaluating manifest")
 	}
+
 	if _, err := os.Stat(opts.Args.Name); os.IsExist(err) {
-		return bosherr.WrapErrorf(err, "Takeout op name exists")
+		c.ui.PrintLinef("ops file already exists, will be overwritten")
 	}
 	deployment, err := c.to.ParseDeployment(bytes)
 
@@ -39,7 +40,7 @@ func (c TakeOutCmd) Run(opts TakeOutOpts) error {
 	for _, r := range deployment.Releases {
 		if r.URL == "" {
 			c.ui.PrintLinef("Release does not have a URL for take_out; Name: %s / %s", r.Name, r.Version)
-			return bosherr.WrapErrorf(nil, "Provide an opsfile that has a URL or removes this release") // TODO
+			return bosherr.WrapErrorf(nil, "Provide an opsfile that has a URL or remove this release") // TODO
 		} else {
 			o, err := c.to.TakeOutRelease(r, c.ui)
 			if err != nil {
@@ -61,6 +62,9 @@ func (c TakeOutCmd) Run(opts TakeOutOpts) error {
 	if err != nil {
 		return err
 	}
+
+	_, err = takeoutOp.WriteString("---\n")
+	_, err = takeoutOp.WriteString(string(y))
 	if takeoutOp != nil {
 		defer func() {
 			if ferr := takeoutOp.Close(); ferr != nil {
@@ -68,8 +72,7 @@ func (c TakeOutCmd) Run(opts TakeOutOpts) error {
 			}
 		}()
 	}
-	_, err = takeoutOp.WriteString("---\n")
-	_, err = takeoutOp.WriteString(string(y))
+
 	if err != nil {
 		return err
 	}

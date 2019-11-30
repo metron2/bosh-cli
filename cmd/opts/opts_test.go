@@ -1370,10 +1370,10 @@ var _ = Describe("Opts", func() {
 			Expect(getStructTagForName("Args", &opts)).To(Equal(`positional-args:"true" required:"true"`))
 		})
 
-		Describe("MirrorPrefix", func() {
+		Describe("StemcellType", func() {
 			It("contains desired values", func() {
-				Expect(getStructTagForName("MirrorPrefix", &opts)).To(Equal(
-					`long:"mirror-prefix" short:"m" description:"Mirror prefix" optional:"true" default:"file:"`,
+				Expect(getStructTagForName("StemcellType", &opts)).To(Equal(
+					`long:"stemcell-type" short:"t" description:"Stemcell type" optional:"true" default:"vsphere-esxi"`,
 				))
 			})
 		})
