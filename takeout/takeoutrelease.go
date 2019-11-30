@@ -2,6 +2,7 @@ package takeout
 
 import (
 	"crypto/sha1"
+	"crypto/sha256"
 	"fmt"
 	boshdir "github.com/cloudfoundry/bosh-cli/director"
 	boshui "github.com/cloudfoundry/bosh-cli/ui"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 )
 
 var BadChar = regexp.MustCompile("[?=\"]")
@@ -18,13 +20,10 @@ var BadChar = regexp.MustCompile("[?=\"]")
 type RealUtensils struct {
 }
 
-func (c RealUtensils) RetrieveRelease(r boshdir.ManifestRelease, ui boshui.UI, localFileName string) (err error) {
-	ui.PrintLinef("Downloading release: %s / %s -> %s", r.Name, r.Version, localFileName)
+func (c RealUtensils) Download(url string, localFileName string) (result DownloadInfo, err error) {
 
 	tempFileName := localFileName + ".download"
-
-
-	resp, err := http.Get(r.URL)
+	resp, err := http.Get(url)
 
 	if resp != nil {
 		defer func() {
@@ -34,7 +33,7 @@ func (c RealUtensils) RetrieveRelease(r boshdir.ManifestRelease, ui boshui.UI, l
 		}()
 	}
 	if err != nil {
-		return err
+		return DownloadInfo{}, err
 	}
 
 	// Create the file
@@ -47,26 +46,28 @@ func (c RealUtensils) RetrieveRelease(r boshdir.ManifestRelease, ui boshui.UI, l
 		}()
 	}
 	if err != nil {
-		return err
+		return DownloadInfo{}, err
 	}
 
 	// Write the body to file
-	hash := sha1.New()
-	_, err = io.Copy(out, io.TeeReader(resp.Body, hash))
-	actualSha1 := fmt.Sprintf("%x", hash.Sum(nil))
+	hashSha1 := sha1.New()
+	hashSha256 := sha256.New()
+	_, err = io.Copy(out, io.TeeReader(io.TeeReader(resp.Body, hashSha1), hashSha256))
+	actualSha1 := fmt.Sprintf("%x", hashSha1.Sum(nil))
+	actualSha256 := fmt.Sprintf("%x", hashSha256.Sum(nil))
 	if err != nil {
-		return err
-	}
-	if len(r.SHA1) == 40 {
-		if actualSha1 != r.SHA1 {
-			return bosherr.Errorf("sha1 mismatch %s (a:%s, e:%s)", localFileName, actualSha1, r.SHA1)
-		}
+		return DownloadInfo{}, err
 	}
 	err = os.Rename(tempFileName, localFileName)
 	if err != nil {
-		return err
+		return DownloadInfo{}, err
 	}
-	return nil
+
+	return DownloadInfo{
+		sha1:     actualSha1,
+		sha256:   actualSha256,
+		fileName: localFileName,
+	}, nil
 }
 
 func (c RealUtensils) TakeOutStemcell(s boshdir.ManifestReleaseStemcell, ui boshui.UI, stemCellType string) (err error) {
@@ -75,69 +76,47 @@ func (c RealUtensils) TakeOutStemcell(s boshdir.ManifestReleaseStemcell, ui bosh
 
 	if _, err := os.Stat(localFileName); os.IsNotExist(err) {
 
-		err := c.RetrieveStemcell(ui, s, localFileName, stemCellType)
+		url := fmt.Sprintf("https://bosh.io/d/stemcells/bosh-%s-%s-go_agent?v=%s", stemCellType, s.OS, s.Version)
+		result, err := c.Download(url, localFileName)
 		if err != nil {
 			return err
 		}
+		ui.PrintLinef("Stemcell downloaded %s", result.fileName)
+
 	} else {
 		ui.PrintLinef("Stemcell present: %s", localFileName)
 	}
 	return
 }
 
-func (c RealUtensils) RetrieveStemcell(ui boshui.UI, s boshdir.ManifestReleaseStemcell, localFileName string, stemCellType string) (err error) {
-	ui.PrintLinef("Downloading stemcell: %s / %s -> %s", s.OS, s.Version, localFileName)
-	url := fmt.Sprintf("https://bosh.io/d/stemcells/bosh-%s-%s-go_agent?v=%s", stemCellType, s.OS, s.Version)
-	ui.PrintLinef("Trying %s", url)
-	resp, err := http.Get(url)
-	if resp != nil {
-		defer func() {
-			if ferr := resp.Body.Close(); ferr != nil {
-				err = ferr
-			}
-		}()
-	}
-	if err != nil {
-		return err
-	}
-	// Create the file
-	out, err := os.Create(localFileName)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if ferr := out.Close(); ferr != nil {
-			err = ferr
-		}
-	}()
-	// Write the body to file
-	hash := sha1.New()
-	_, err = io.Copy(out, io.TeeReader(resp.Body, hash))
-	actualSha1 := fmt.Sprintf("%x", hash.Sum(nil))
-	if err != nil {
-		return err
-	}
-	ui.PrintLinef("Stemcell %s SHA1:%s", localFileName, actualSha1)
-	return err
-}
-
-func (c RealUtensils) TakeOutRelease(r boshdir.ManifestRelease, ui boshui.UI, mirrorPrefix string) (entry OpEntry, err error) {
+func (c RealUtensils) TakeOutRelease(r boshdir.ManifestRelease, ui boshui.UI) (entry OpEntry, err error) {
 
 	// generate a local file name that's safe
 	localFileName := BadChar.ReplaceAllString(fmt.Sprintf("%s_v%s.tgz", r.Name, r.Version), "_")
 
 	if _, err := os.Stat(localFileName); os.IsNotExist(err) {
-		err = c.RetrieveRelease(r, ui, localFileName)
+		ui.PrintLinef("Downloading release: %s / %s -> %s", r.Name, r.Version, localFileName)
+
+		result, err := c.Download(r.URL, localFileName)
 		if err != nil {
 			return OpEntry{}, err
+		}
+		if len(r.SHA1) == 40 {
+			if result.sha1 != r.SHA1 {
+				return OpEntry{}, bosherr.Errorf("sha1 mismatch %s (a:%s, e:%s)", localFileName, result.sha1, r.SHA1)
+			}
+		} else if strings.HasPrefix(r.SHA1, "sha256") {
+			expected := strings.Split(r.SHA1, ":")[1]
+			if result.sha256 != expected {
+				return OpEntry{}, bosherr.Errorf("sha256 mismatch %s (a:%s, e:%s)", localFileName, result.sha256, expected)
+			}
 		}
 	} else {
 		ui.PrintLinef("Release present: %s / %s -> %s", r.Name, r.Version, localFileName)
 	}
 	if len(r.Name) > 0 {
 		path := fmt.Sprintf("/releases/name=%s/url", r.Name)
-		localFile := fmt.Sprintf("%s%s", mirrorPrefix, localFileName)
-		entry = OpEntry{Type: "replace", Path: path, Value: localFile}
+		entry = OpEntry{Type: "remove", Path: path}
 	}
 	return entry, err
 }

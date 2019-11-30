@@ -1,13 +1,13 @@
 package cmd_test
 
 import (
+	. "github.com/cloudfoundry/bosh-cli/cmd"
+	. "github.com/cloudfoundry/bosh-cli/cmd/opts"
+	fakeout "github.com/cloudfoundry/bosh-cli/takeout/takeoutfakes"
+	fakeui "github.com/cloudfoundry/bosh-cli/ui/fakes"
 	fakesys "github.com/cloudfoundry/bosh-utils/system/fakes"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	. "github.com/cloudfoundry/bosh-cli/cmd"
-	fakeout "github.com/cloudfoundry/bosh-cli/takeout/takeoutfakes"
-	fakeui "github.com/cloudfoundry/bosh-cli/ui/fakes"
 )
 
 // bosh take_out cf-6-offline-sources.yml manifest.yml -o use-compiled-release.yml

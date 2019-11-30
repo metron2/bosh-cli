@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	. "github.com/cloudfoundry/bosh-cli/cmd/opts"
 	boshdir "github.com/cloudfoundry/bosh-cli/director"
 	biui "github.com/cloudfoundry/bosh-cli/ui"
 	boshtbl "github.com/cloudfoundry/bosh-cli/ui/table"
@@ -28,12 +29,18 @@ func (c InspectStemcellTarballCmd) Run(opts InspectStemcellTarballOpts) error {
 		return err
 	}
 
+	infrastructure := metadata.CloudProperties["infrastructure"]
+	if infrastructure == nil {
+		infrastructure = "unknown"
+	}
+
 	metadataTable := boshtbl.Table{
 		Content: "stemcell-metadata",
 		Header: []boshtbl.Header{
 			boshtbl.NewHeader("Name"),
 			boshtbl.NewHeader("OS"),
 			boshtbl.NewHeader("Version"),
+			boshtbl.NewHeader("Infrastructure"),
 		},
 		SortBy: []boshtbl.ColumnSort{{Column: 0, Asc: true}},
 		Rows: [][]boshtbl.Value{
@@ -41,6 +48,7 @@ func (c InspectStemcellTarballCmd) Run(opts InspectStemcellTarballOpts) error {
 				boshtbl.NewValueString(metadata.Name),
 				boshtbl.NewValueString(metadata.OS),
 				boshtbl.NewValueString(metadata.Version),
+				boshtbl.NewValueString(infrastructure.(string)),
 			},
 		},
 	}

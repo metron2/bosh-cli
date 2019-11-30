@@ -99,8 +99,9 @@ var _ = Describe("VMs", func() {
 				ProcessState: "running",
 				Bootstrap:    true,
 
-				IPs: []string{"ip"},
-				DNS: []string{"dns"},
+				IPs:        []string{"ip"},
+				Deployment: "dep",
+				DNS:        []string{"dns"},
 
 				AZ:              "az",
 				Ignore:          true,
@@ -205,8 +206,9 @@ var _ = Describe("VMs", func() {
 				ProcessState: "running",
 				Bootstrap:    true,
 
-				IPs: []string{"ip"},
-				DNS: []string{"dns"},
+				IPs:        []string{"ip"},
+				Deployment: "dep",
+				DNS:        []string{"dns"},
 
 				AZ:              "az",
 				VMID:            "vm-cid",
@@ -242,7 +244,6 @@ var _ = Describe("VMs", func() {
 
 				ResurrectionPaused: true,
 			}))
-
 		})
 
 		It("correctly parses disk cids when no persistent disks are present", func() {
@@ -311,8 +312,9 @@ var _ = Describe("VMs", func() {
 				ProcessState: "running",
 				Bootstrap:    true,
 
-				IPs: []string{"ip"},
-				DNS: []string{"dns"},
+				IPs:        []string{"ip"},
+				Deployment: "dep",
+				DNS:        []string{"dns"},
 
 				AZ:              "az",
 				VMID:            "vm-cid",
@@ -355,9 +357,9 @@ var _ = Describe("VMs", func() {
 			ConfigureTaskResult(
 				ghttp.VerifyRequest("GET", "/deployments/dep/vms", "format=full"),
 				`
+{"job_state":"failing"}
 {"job_state":"running"}
 {"job_state":"running","processes":[{"state": "running"}]}
-{"job_state":"running","processes":[{"state": "running"},{"state": "failing"}]}
 {"job_state":"failing","processes":[{"state": "running"},{"state": "running"}]}
 `,
 				server,
@@ -365,10 +367,18 @@ var _ = Describe("VMs", func() {
 
 			infos, err := deployment.VMInfos()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(infos[0].IsRunning()).To(BeTrue())
-			Expect(infos[1].IsRunning()).To(BeTrue())
-			Expect(infos[2].IsRunning()).To(BeFalse())
+
+			Expect(infos[0].IsRunning()).To(BeFalse())
+			Expect(infos[0].InstanceState()).To(Equal("failing"))
+
+			Expect(infos[1].IsRunning()).To(BeFalse())
+			Expect(infos[1].InstanceState()).To(Equal(""))
+
+			Expect(infos[2].IsRunning()).To(BeTrue())
+			Expect(infos[2].InstanceState()).To(Equal("running"))
+
 			Expect(infos[3].IsRunning()).To(BeFalse())
+			Expect(infos[3].InstanceState()).To(Equal("failing"))
 		})
 
 		It("returns error if response is non-200", func() {

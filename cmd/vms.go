@@ -5,6 +5,7 @@ import (
 
 	"code.cloudfoundry.org/workpool"
 
+	. "github.com/cloudfoundry/bosh-cli/cmd/opts"
 	boshdir "github.com/cloudfoundry/bosh-cli/director"
 	boshui "github.com/cloudfoundry/bosh-cli/ui"
 	boshtbl "github.com/cloudfoundry/bosh-cli/ui/table"
@@ -29,12 +30,12 @@ func NewVMsCmd(ui boshui.UI, director boshdir.Director, parallel int) VMsCmd {
 func (c VMsCmd) Run(opts VMsOpts) error {
 	instTable := InstanceTable{
 		// VMs command should always show VM specifics
-		VMDetails: true,
-
-		Details:         false,
-		DNS:             opts.DNS,
-		Vitals:          opts.Vitals,
-		CloudProperties: opts.CloudProperties,
+		VMDetails:         true,
+		DeploymentDetails: false,
+		Details:           false,
+		DNS:               opts.DNS,
+		Vitals:            opts.Vitals,
+		CloudProperties:   opts.CloudProperties,
 	}
 
 	if len(opts.Deployment) > 0 {

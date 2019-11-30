@@ -363,7 +363,7 @@ var _ = Describe("Deployment", func() {
 		})
 	})
 
-	Describe("job states", func() {
+	Describe("converge job states", func() {
 		var (
 			slug         AllOrInstanceGroupOrInstanceSlug
 			force        bool
@@ -378,18 +378,24 @@ var _ = Describe("Deployment", func() {
 			slug = AllOrInstanceGroupOrInstanceSlug{}
 			force = false
 
-			startOpts = StartOpts{}
+			startOpts = StartOpts{Converge: true}
 			stopOpts = StopOpts{
 				SkipDrain: false,
 				Force:     force,
+				Converge:  true,
 			}
 			detachedOpts = StopOpts{
 				Hard:      true,
 				SkipDrain: false,
 				Force:     force,
+				Converge:  true,
 			}
-			restartOpts = RestartOpts{}
-			recreateOpts = RecreateOpts{}
+			restartOpts = RestartOpts{
+				Converge: true,
+			}
+			recreateOpts = RecreateOpts{
+				Converge: true,
+			}
 		})
 
 		states := map[string]func(Deployment) error{
@@ -593,6 +599,200 @@ var _ = Describe("Deployment", func() {
 				})
 			})
 		}
+	})
+
+	Describe("no-converge job actions", func() {
+		Describe("start", func() {
+			It("changes state for specific instance", func() {
+				slug := NewAllOrInstanceGroupOrInstanceSlug("my-ig", "id")
+
+				ConfigureTaskResult(
+					ghttp.CombineHandlers(
+						ghttp.VerifyRequest("POST", "/deployments/dep/instance_groups/my-ig/id/actions/start"),
+						ghttp.VerifyBasicAuth("username", "password"),
+						ghttp.VerifyHeader(http.Header{
+							"Content-Type": []string{"text/yaml"},
+						}),
+						ghttp.VerifyBody([]byte{}),
+					),
+					``,
+					server,
+				)
+				startOpts := StartOpts{}
+				err := deployment.Start(slug, startOpts)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("returns an error if changing state response is non-200", func() {
+				AppendBadRequest(ghttp.VerifyRequest("POST", "/deployments/dep/instance_groups/my-ig/id/actions/start"), server)
+				slug := NewAllOrInstanceGroupOrInstanceSlug("my-ig", "id")
+				startOpts := StartOpts{}
+				err := deployment.Start(slug, startOpts)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("Non-converging action failed"))
+			})
+		})
+
+		Describe("stop", func() {
+			It("changes state for specific instance", func() {
+				slug := NewAllOrInstanceGroupOrInstanceSlug("my-ig", "id")
+
+				ConfigureTaskResult(
+					ghttp.CombineHandlers(
+						ghttp.VerifyRequest("POST", "/deployments/dep/instance_groups/my-ig/id/actions/stop"),
+						ghttp.VerifyBasicAuth("username", "password"),
+						ghttp.VerifyHeader(http.Header{
+							"Content-Type": []string{"text/yaml"},
+						}),
+						ghttp.VerifyBody([]byte{}),
+					),
+					``,
+					server,
+				)
+				stopOpts := StopOpts{}
+				err := deployment.Stop(slug, stopOpts)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("accepts skip drain and hard", func() {
+				slug := NewAllOrInstanceGroupOrInstanceSlug("my-ig", "id")
+
+				ConfigureTaskResult(
+					ghttp.CombineHandlers(
+						ghttp.VerifyRequest("POST", "/deployments/dep/instance_groups/my-ig/id/actions/stop", "hard=true&skip_drain=true"),
+						ghttp.VerifyBasicAuth("username", "password"),
+						ghttp.VerifyHeader(http.Header{
+							"Content-Type": []string{"text/yaml"},
+						}),
+						ghttp.VerifyBody([]byte{}),
+					),
+					``,
+					server,
+				)
+				stopOpts := StopOpts{
+					SkipDrain: true,
+					Hard:      true,
+				}
+				err := deployment.Stop(slug, stopOpts)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("returns an error if changing state response is non-200", func() {
+				AppendBadRequest(ghttp.VerifyRequest("POST", "/deployments/dep/instance_groups/my-ig/id/actions/stop"), server)
+				slug := NewAllOrInstanceGroupOrInstanceSlug("my-ig", "id")
+				stopOpts := StopOpts{}
+				err := deployment.Stop(slug, stopOpts)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("Non-converging action failed"))
+			})
+		})
+
+		Describe("restart", func() {
+			It("changes state for specific instance", func() {
+				slug := NewAllOrInstanceGroupOrInstanceSlug("my-ig", "id")
+
+				ConfigureTaskResult(
+					ghttp.CombineHandlers(
+						ghttp.VerifyRequest("POST", "/deployments/dep/instance_groups/my-ig/id/actions/restart"),
+						ghttp.VerifyBasicAuth("username", "password"),
+						ghttp.VerifyHeader(http.Header{
+							"Content-Type": []string{"text/yaml"},
+						}),
+						ghttp.VerifyBody([]byte{}),
+					),
+					``,
+					server,
+				)
+				restartOpts := RestartOpts{}
+				err := deployment.Restart(slug, restartOpts)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("accepts skip drain", func() {
+				slug := NewAllOrInstanceGroupOrInstanceSlug("my-ig", "id")
+
+				ConfigureTaskResult(
+					ghttp.CombineHandlers(
+						ghttp.VerifyRequest("POST", "/deployments/dep/instance_groups/my-ig/id/actions/restart", "skip_drain=true"),
+						ghttp.VerifyBasicAuth("username", "password"),
+						ghttp.VerifyHeader(http.Header{
+							"Content-Type": []string{"text/yaml"},
+						}),
+						ghttp.VerifyBody([]byte{}),
+					),
+					``,
+					server,
+				)
+				restartOpts := RestartOpts{
+					SkipDrain: true,
+				}
+				err := deployment.Restart(slug, restartOpts)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("returns an error if changing state response is non-200", func() {
+				AppendBadRequest(ghttp.VerifyRequest("POST", "/deployments/dep/instance_groups/my-ig/id/actions/restart"), server)
+				slug := NewAllOrInstanceGroupOrInstanceSlug("my-ig", "id")
+				restartOpts := RestartOpts{}
+				err := deployment.Restart(slug, restartOpts)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("Non-converging action failed"))
+			})
+		})
+
+		Describe("recreate", func() {
+			It("changes state for specific instance", func() {
+				slug := NewAllOrInstanceGroupOrInstanceSlug("my-ig", "id")
+
+				ConfigureTaskResult(
+					ghttp.CombineHandlers(
+						ghttp.VerifyRequest("POST", "/deployments/dep/instance_groups/my-ig/id/actions/recreate"),
+						ghttp.VerifyBasicAuth("username", "password"),
+						ghttp.VerifyHeader(http.Header{
+							"Content-Type": []string{"text/yaml"},
+						}),
+						ghttp.VerifyBody([]byte{}),
+					),
+					``,
+					server,
+				)
+				recreateOpts := RecreateOpts{}
+				err := deployment.Recreate(slug, recreateOpts)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("accepts skip drain and fix", func() {
+				slug := NewAllOrInstanceGroupOrInstanceSlug("my-ig", "id")
+
+				ConfigureTaskResult(
+					ghttp.CombineHandlers(
+						ghttp.VerifyRequest("POST", "/deployments/dep/instance_groups/my-ig/id/actions/recreate", "skip_drain=true&ignore_unresponsive_agent=true"),
+						ghttp.VerifyBasicAuth("username", "password"),
+						ghttp.VerifyHeader(http.Header{
+							"Content-Type": []string{"text/yaml"},
+						}),
+						ghttp.VerifyBody([]byte{}),
+					),
+					``,
+					server,
+				)
+				recreateOpts := RecreateOpts{
+					SkipDrain: true,
+					Fix:       true,
+				}
+				err := deployment.Recreate(slug, recreateOpts)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("returns an error if changing state response is non-200", func() {
+				AppendBadRequest(ghttp.VerifyRequest("POST", "/deployments/dep/instance_groups/my-ig/id/actions/recreate"), server)
+				slug := NewAllOrInstanceGroupOrInstanceSlug("my-ig", "id")
+				recreateOpts := RecreateOpts{}
+				err := deployment.Recreate(slug, recreateOpts)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("Non-converging action failed"))
+			})
+		})
 	})
 
 	Describe("ExportRelease", func() {
@@ -902,7 +1102,7 @@ var _ = Describe("Deployment", func() {
 	})
 
 	Describe("Variables", func() {
-		It("returns the list of placeholder variables", func() {
+		It("returns the list of all variables", func() {
 			server.AppendHandlers(
 				ghttp.CombineHandlers(
 					ghttp.VerifyRequest("GET", "/deployments/dep/variables"),
@@ -925,7 +1125,7 @@ var _ = Describe("Deployment", func() {
 			Expect(result[1].Name).To(Equal("foo-2"))
 		})
 
-		It("returns an empty list if there are no placeholder variables", func() {
+		It("returns an empty list if there are no variables", func() {
 			server.AppendHandlers(
 				ghttp.CombineHandlers(
 					ghttp.VerifyRequest("GET", "/deployments/dep/variables"),
@@ -939,7 +1139,7 @@ var _ = Describe("Deployment", func() {
 			Expect(len(result)).To(Equal(0))
 		})
 
-		It("errors if fetching placeholder variables fails", func() {
+		It("errors if fetching variables fails", func() {
 			server.AppendHandlers(
 				ghttp.CombineHandlers(
 					ghttp.VerifyRequest("GET", "/deployments/dep/variables"),

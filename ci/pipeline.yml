@@ -4,13 +4,14 @@ groups:
   jobs:
   - test-unit
   - test-integration
-  - test-acceptance
+  - test-acceptance-xenial
   - integration-postgres
   - build
   - build-alpha
   - bump-minor
   - bump-major
   - bump-deps
+  - test-helper-urls
 
 jobs:
   - name: bump-deps
@@ -46,16 +47,17 @@ jobs:
         file: bosh-cli/ci/tasks/test-integration.yml
         privileged: true
 
-  - name: test-acceptance
+  - name: test-acceptance-xenial
     public: true
     plan:
-      - aggregate:
+      - in_parallel:
         - get: bosh-cli
           passed: [test-unit,test-integration]
           trigger: true
         - get: bosh-warden-cpi-release
           trigger: true
-      - aggregate:
+        - get: bosh-warden-stemcell-xenial
+      - in_parallel:
         - task: test-acceptance
           file: bosh-cli/ci/tasks/test-acceptance.yml
           privileged: true
@@ -65,7 +67,7 @@ jobs:
     serial: true
     build_logs_to_retain: 250
     plan:
-      - aggregate:
+      - in_parallel:
         - get: bosh-src
           trigger: true
         - get: version-semver
@@ -84,7 +86,7 @@ jobs:
         privileged: true
         input_mapping:
           bosh-cli: compiled-linux
-        file: bosh-src/ci/tasks/test-integration-gocli.yml
+        file: bosh-src/ci/tasks/test-integration.yml
         tags: ["bosh-integration"]
         params:
           DB: postgresql
@@ -92,16 +94,14 @@ jobs:
   - name: build
     public: true
     plan:
-      - aggregate:
+      - in_parallel:
         - get: bosh-cli
           passed:
-           - test-acceptance
+           - test-acceptance-xenial
            - integration-postgres
         - get: version-semver
-          params: {bump: patch}
         - get: homebrew-tap
-      - {put: version-semver, params: {file: version-semver/number}}
-      - aggregate:
+      - in_parallel:
         - task: build-linux
           file: bosh-cli/ci/tasks/build-linux.yml
         - task: build-darwin
@@ -113,52 +113,19 @@ jobs:
         file: bosh-cli/ci/tasks/build-checksum-file.yml
 
       - task: create-dockerfile
-        config:
-          platform: linux
-          image_resource:
-            type: docker-image
-            source: {repository: bosh/cli}
-          run:
-            path: /bin/bash
-            args:
-            - -c
-            - |
-              cp compiled-linux/bosh-cli-* docker-assets/bosh2
-              chmod +x docker-assets/bosh2
-
-              cat >docker-assets/Dockerfile <<-FILE
-              FROM ubuntu:trusty
-
-              RUN locale-gen en_US.UTF-8
-              RUN dpkg-reconfigure locales
-              ENV LANG en_US.UTF-8
-              ENV LC_ALL en_US.UTF-8
-
-              RUN apt-get update && \
-                apt-get install -y \
-                build-essential zlibc zlib1g-dev ruby ruby-dev openssl \
-                libxslt-dev libxml2-dev libssl-dev libreadline6 libreadline6-dev \
-                libyaml-dev libsqlite3-dev sqlite3 jq && \
-                apt-get clean
-
-              COPY bosh2 /usr/local/bin/bosh2
-              COPY bosh2 /usr/local/bin/bosh
-              FILE
-          inputs:
-          - name: compiled-linux
-          outputs:
-          - name: docker-assets
+        file: bosh-cli/ci/tasks/create-dockerfile.yml
 
       - put: bosh-cli-commit-status
         params:
           state: success
           commit: bosh-cli
 
-      - aggregate:
+      - {put: bosh-cli-promoted, params: {repository: bosh-cli, tag: version-semver/number, tag_prefix: v}}
+
+      - in_parallel:
         - {put: release-bucket-linux, params: {file: compiled-linux/bosh-cli-*-linux-amd64}}
         - {put: release-bucket-darwin, params: {file: compiled-darwin/bosh-cli-*-darwin-amd64}}
         - {put: release-bucket-windows, params: {file: compiled-windows/bosh-cli-*-windows-amd64.exe}}
-        - {put: bosh-cli-promoted, params: {repository: bosh-cli, tag: version-semver/number, tag_prefix: v}}
 
         - put: final-docker
           params:
@@ -166,36 +133,56 @@ jobs:
             tag: version-semver/number
             tag_as_latest: true
 
-      - put: github-release
-        params:
-          name: version-semver/number
-          tag: version-semver/number
-          tag_prefix: v
-          globs:
-            - compiled-linux/bosh-cli-*-linux-amd64
-            - compiled-darwin/bosh-cli-*-darwin-amd64
-            - compiled-windows/bosh-cli-*-windows-amd64.exe
-          body: checksums/checksums
+      - do:
+        - task: prepare-version
+          config:
+            platform: linux
+            image_resource:
+              type: docker-image
+              source: {repository: alpine}
+            run:
+              path: /bin/sh
+              args:
+              - -c
+              - |
+                echo -n "v" >> release-version/version
+                cat version-semver/number >> release-version/version
+            inputs:
+            - name: version-semver
+            outputs:
+            - name: release-version
+        - put: github-release
+          params:
+            name: release-version/version
+            tag: release-version/version
+            globs:
+              - compiled-linux/bosh-cli-*-linux-amd64
+              - compiled-darwin/bosh-cli-*-darwin-amd64
+              - compiled-windows/bosh-cli-*-windows-amd64.exe
+            body: checksums/checksums
 
       - task: update-homebrew-formula
         file: bosh-cli/ci/tasks/update-homebrew-formula.yml
       - put: homebrew-tap
         params:
           repository: update-brew-formula-output/homebrew-tap
+      - put: version-semver
+        params:
+          bump: patch
 
   - name: build-alpha
     public: true
     plan:
-      - aggregate:
+      - in_parallel:
         - get: bosh-cli
           passed:
-           - test-acceptance
+           - test-acceptance-xenial
            - integration-postgres
           trigger: true
         - get: alpha-version-semver
           params: {bump: patch}
       - {put: alpha-version-semver, params: {file: alpha-version-semver/number}}
-      - aggregate:
+      - in_parallel:
         - task: build-linux
           input_mapping: {version-semver: alpha-version-semver}
           file: bosh-cli/ci/tasks/build-linux.yml
@@ -212,10 +199,21 @@ jobs:
           params:
             FILENAME_PREFIX: "alpha-"
 
-      - aggregate:
+      - in_parallel:
         - {put: alpha-release-bucket-linux, params: {file: compiled-linux/alpha-bosh-cli-*-linux-amd64}}
         - {put: alpha-release-bucket-darwin, params: {file: compiled-darwin/alpha-bosh-cli-*-darwin-amd64}}
         - {put: alpha-release-bucket-windows, params: {file: compiled-windows/alpha-bosh-cli-*-windows-amd64.exe}}
+
+  - name: test-helper-urls
+    public: true
+    plan:
+      - in_parallel:
+        - get: alpha-release-bucket-linux
+          passed: [build-alpha]
+        - get: bosh-cli
+          passed: [build-alpha]
+      - task: test-helper-urls
+        file: bosh-cli/ci/tasks/test-helper-urls.yml
 
   - name: bump-minor
     public: true
@@ -230,6 +228,7 @@ jobs:
       - get: version-semver
         params: {bump: major}
       - {put: version-semver, params: {file: version-semver/number}}
+
 
 resources:
   - name: bosh-src
@@ -251,6 +250,10 @@ resources:
       branch: develop
       private_key: {{concourse_github_private_key}}
 
+  - name: bosh-warden-stemcell-xenial
+    type: bosh-io-stemcell
+    source:
+      name: bosh-warden-boshlite-ubuntu-xenial-go_agent
 
   - name: bosh-warden-cpi-release
     type: bosh-io-release
